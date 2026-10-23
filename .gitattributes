@@ -8,7 +8,9 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 *.service text eol=lf
+*.socket text eol=lf
 deploy/featherpanel text eol=lf
+deploy/feather-python text eol=lf
 *.png binary
 *.jpg binary
 *.mp4 binary
