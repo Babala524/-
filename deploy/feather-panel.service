@@ -1,0 +1,35 @@
+[Unit]
+Description=FeatherPanel native game panel
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=featherpanel
+Group=featherpanel
+WorkingDirectory=/opt/feather-panel-native/current
+Environment=NODE_ENV=production HOME=/var/lib/feather-panel SCREENDIR=/var/lib/feather-panel/screen LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8
+EnvironmentFile=/etc/feather-panel.env
+ExecStart=@NODE@ /opt/feather-panel-native/current/backend/src/server.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=65
+KillMode=mixed
+UMask=0077
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/feather-panel
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

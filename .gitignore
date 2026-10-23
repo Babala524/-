@@ -1,0 +1,15 @@
+data/
+.env
+.env.local
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
+__pycache__/
+*.pyc
+node_modules/
+dist/
+.DS_Store
+cloud-deployment.md
+verification.json

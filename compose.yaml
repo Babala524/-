@@ -1,0 +1,39 @@
+services:
+  feather:
+    build:
+      context: .
+      args:
+        NODE_IMAGE: ${FEATHER_NODE_IMAGE:-node:24-bookworm-slim}
+        DEBIAN_MIRROR: ${FEATHER_DEBIAN_MIRROR:-http://deb.debian.org}
+    image: feather-panel:0.1.0
+    restart: unless-stopped
+    init: true
+    # 直接使用宿主机网络：云厂商/NAT 只需把自己的公网端口映射到内网 80。
+    # 游戏直连端口由房间设置填写，并直接占用宿主机 UDP 端口。
+    network_mode: host
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      FEATHER_HOST: ${FEATHER_BIND:-0.0.0.0}
+      FEATHER_PORT: ${FEATHER_WEB_PORT:-80}
+      FEATHER_SECURE_COOKIE: ${FEATHER_SECURE_COOKIE:-0}
+      FEATHER_ALLOW_REGISTRATION: ${FEATHER_ALLOW_REGISTRATION:-0}
+      FEATHER_PUBLIC_HOST: ${FEATHER_PUBLIC_HOST:-}
+      FEATHER_CLUSTER_TOKEN: ${FEATHER_CLUSTER_TOKEN:-}
+      FEATHER_STEAM_API_KEY: ${FEATHER_STEAM_API_KEY:-}
+      FEATHER_TRANSLATION_PROVIDER: ${FEATHER_TRANSLATION_PROVIDER:-mymemory}
+      FEATHER_TRANSLATION_URL: ${FEATHER_TRANSLATION_URL:-}
+      FEATHER_TRANSLATION_KEY: ${FEATHER_TRANSLATION_KEY:-}
+      FEATHER_UPLOAD_MB: ${FEATHER_UPLOAD_MB:-512}
+      FEATHER_EXTRACT_MB: ${FEATHER_EXTRACT_MB:-2048}
+      FEATHER_MOD_REGISTRY: ${FEATHER_MOD_REGISTRY-http://202.189.15.98:35555}
+      FEATHER_MOD_REGISTRY_HOST: ${FEATHER_MOD_REGISTRY_HOST:-0}
+      FEATHER_MOD_LIBRARY_MB: ${FEATHER_MOD_LIBRARY_MB:-4096}
+    volumes:
+      - feather-data:/data
+    mem_limit: ${FEATHER_MEMORY_LIMIT:-3g}
+    cpus: ${FEATHER_CPU_LIMIT:-2.0}
+    stop_grace_period: 60s
+
+volumes:
+  feather-data:
+

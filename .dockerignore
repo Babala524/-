@@ -1,0 +1,7 @@
+data/
+backend/test/
+*.zip
+*.log
+.env
+.git/
+verification.json

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-help}" in
+  status) exec systemctl status feather-panel.service --no-pager;;
+  logs) exec journalctl -u feather-panel.service -n 100 -f;;
+  key)
+    ((EUID==0)) || { echo '请使用 sudo featherpanel key' >&2;exit 1; }
+    if [[ -f /var/lib/feather-panel/setup-key ]];then cat /var/lib/feather-panel/setup-key;
+    else echo '管理员账号已初始化，请使用账号密码登录。';fi;;
+  start|restart|stop)
+    ((EUID==0)) || { echo '需要 sudo 权限' >&2;exit 1; }
+    base=/opt/feather-panel-native
+    node=$(find "$base/runtime" -maxdepth 3 -path '*/bin/node' -type f | sort -V | tail -1)
+    [[ -x $node ]] || { echo '找不到原生 Node.js' >&2;exit 1; }
+    if [[ $1 == start ]] || ! systemctl is-active --quiet feather-panel.service;then
+      if [[ $1 == stop ]];then echo '面板服务已经停止。';exit 0;fi
+      systemctl start feather-panel.service
+      "$node" "$base/current/backend/scripts/native-maintenance.mjs" health
+      exit 0
+    fi
+    state=$(mktemp /run/feather-worlds.XXXXXXXX)
+    trap 'rm -f -- "$state"' EXIT
+    "$node" "$base/current/backend/scripts/native-maintenance.mjs" stop "$state"
+    systemctl "${1}" feather-panel.service
+    if [[ $1 == restart ]];then "$node" "$base/current/backend/scripts/native-maintenance.mjs" health;"$node" "$base/current/backend/scripts/native-maintenance.mjs" restore "$state";fi;;
+  *) printf '用法：sudo featherpanel {status|logs|key|start|restart|stop}\n更新：在新版源码目录执行 sudo bash install.sh\n';;
+esac
