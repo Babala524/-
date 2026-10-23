@@ -29,6 +29,8 @@ sudo featherpanel key
 常用管理命令：
 
 ```bash
+sudo featherpanel
+sudo featherpanel update --line auto
 sudo featherpanel status
 sudo featherpanel logs
 sudo featherpanel start
@@ -50,15 +52,25 @@ sudo featherpanel stop
 
 已提供 `install-online.sh`，会从指定 GitHub 仓库的 Release 下载完整部署包、核对 SHA-256、检查压缩包路径，再调用原生安装程序。无需在自己电脑下载和上传部署包。首次执行需要云服具备 curl；缺少时先用系统软件源安装 `ca-certificates curl`。
 
-维护者需将 `install-online.sh`、`FeatherPanel-native.tar.gz`、`FeatherPanel-native.tar.gz.sha256` 三个文件上传到同一 GitHub Release。已在本地工作区生成这三个发布文件。对外发布时使用固定文件名，版本由 Release 标签区分。
+维护者运行 `python3 scripts/package-release.py --version v2026.10.23.1`，将 `dist/` 下的 `install-online.sh`、`FeatherPanel-native.tar.gz`、`FeatherPanel-native.tar.gz.sha256`、`release-info.json` 四个文件上传到同标签的 GitHub Release。入口内置该版本和完整包的 SHA-256，首次下载无需查询 GitHub API；更新时读取 Release 的 `release-info.json`，通过同一条下载线路请求。固定文件名通过 Release 标签区分版本。
 
-项目仓库为 `Babala524/-`。发布版本提供以下在线安装入口；需要仓库的 Release 已上传三个发布文件后才能使用：
+项目仓库为 `Babala524/-`，在线入口：
 
 ```bash
 curl -fL --proto '=https' --proto-redir '=https' https://github.com/Babala524/-/releases/latest/download/install-online.sh -o feather-install-online.sh && sudo bash feather-install-online.sh --repo Babala524/-
 ```
 
-指定端口追加 `--port 18081`。指定版本时，首次脚本下载也应使用 `releases/download/版本标签/install-online.sh`，并给脚本传入 `--version 版本标签`。在线安装仍需访问 GitHub、系统软件源、Node.js 和 Valve；已有 Docker 数据不会自动迁移，80 被占用时安装停止。SHA-256 用于核对发布包，维护者必须保护 GitHub 仓库与发布账号。
+交互终端运行默认进入菜单，选择安装或更新后可选择下载线路；首次安装可输入内网端口，默认 80。安装后执行 `sudo featherpanel` 再次打开菜单。菜单更新及 `sudo featherpanel update` 会查询最新正式版；自动化安装使用 `--install`，指定端口追加 `--port 18081`。
+
+GitHub 直连慢时，可以通过第三方加速下载菜单入口：
+
+```bash
+curl -fL --proto '=https' --proto-redir '=https' https://gh-proxy.com/https://github.com/Babala524/-/releases/latest/download/install-online.sh -o feather-install-online.sh && sudo bash feather-install-online.sh
+```
+
+`--line auto` 依次尝试 GitHub、gh-proxy.com、ghfast.top，每条线路最多两次；也可指定 `--line direct`、`--line gh-proxy.com` 或 `--line ghfast.top`。指定单条线路时失败直接报错。下载显示进度，连接超时或持续低速会结束本次尝试；安装显示阶段和失败位置。系统软件源、Node.js 和 Valve 下载使用各自的官方地址，不受 GitHub 加速线路影响。加速站由第三方运营，只用于公开附件，不保证可用性；需要仅访问官方服务时选择 `direct`。
+
+指定版本时下载对应标签的入口，再直接运行；从 v2026.10.23.1 起支持 `--version 标签` 配合版本元数据。在线安装仍需访问系统软件源、Node.js 和 Valve；已有 Docker 数据不会自动迁移，80 被占用时安装停止。SHA-256 用于核对发布包，维护者必须保护 GitHub 仓库与发布账号。
 
 在线入口的 `--check` 会先安装下载所需工具、下载并校验部署包，然后调用原生脚本的环境检查；要完全不安装工具，请在已有完整包内运行 `bash install.sh --check`。
 
@@ -68,4 +80,4 @@ Linux 后端 156 项测试全部通过，包含版本目录链接启动、原运
 
 隔离环境中的 systemctl 使用测试替身，实际启动的是普通账号的 Node 进程；Ubuntu 主机上通过 systemd-analyze 校验了服务文件，但尚未完成真实 systemd 开机启动、完整原生开服与重启云服验证。Ubuntu 22.04、Debian 13 尚未实机验证。现有 Docker 云服保持原部署运行。
 
-在线脚本已在隔离环境用模拟 GitHub 下载验证自动解析版本、参数传递、校验失败拒绝安装及路径穿越拒绝。2026-10-23 已发布 GitHub 正式版本 v2026.10.23，公开脚本、校验文件和完整 73 MB 部署包均已下载并核验；当前云服访问 GitHub 超时，未完成该云服直接从公开地址执行安装的端到端验证。
+在线脚本在隔离环境验证了菜单分发、失败后返回菜单、参数传递、自动线路切换、指定线路失败、内置版本跳过元数据、强制刷新、校验失败和路径穿越拒绝。2026-10-23 已从当前云服通过两条加速线路取得旧版公开安装入口；GitHub 直连此前超时。完整原生开服与真实 systemd 生命周期仍需独立云服验证。

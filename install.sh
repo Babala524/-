@@ -13,6 +13,9 @@ PORT_SET=0
 CHECK=0
 NODE_VERSION=24.22.1
 NODE_SHA=6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6
+STAGE='检查环境'
+trap 'printf "\n未完成步骤：%s。请查看上述错误后重试。\n" "$STAGE" >&2' ERR
+step(){ STAGE=$2;printf '\n安装 [%s/6] %s\n' "$1" "$STAGE"; }
 die(){ printf '错误：%s\n' "$*" >&2; exit 1; }
 usage(){ printf '用法：sudo bash install.sh [--port 80] [--check]\n--check 只检查环境，不安装软件或修改服务。\n'; }
 while (($#));do
@@ -30,7 +33,7 @@ PORT=$((10#$PORT))
 . /etc/os-release
 case "$ID:$VERSION_ID" in ubuntu:22.04|ubuntu:24.04|debian:12|debian:13) ;; *) die '目前支持 Ubuntu 22.04/24.04、Debian 12/13';; esac
 [[ -d /run/systemd/system ]] && command -v systemctl >/dev/null || die '需要 systemd；请在云服系统里执行'
-for item in index.html backend-client.js wallpaper.mp4 backend/src/server.mjs backend/src/accounts.mjs backend/scripts/native-maintenance.mjs deploy/feather-panel.service deploy/featherpanel vendor assets;do
+for item in index.html backend-client.js wallpaper.mp4 install-online.sh backend/src/server.mjs backend/src/accounts.mjs backend/scripts/native-maintenance.mjs deploy/feather-panel.service deploy/featherpanel vendor assets;do
   [[ -e "$SOURCE/$item" ]] || die "源码包不完整：缺少 $item"
 done
 if [[ -f $ENV_FILE ]];then
@@ -55,7 +58,7 @@ if [[ -e $BASE && ! -f $BASE/.native-install ]];then die "$BASE 不是本脚本�
 if [[ -e $DATA && ! -f $BASE/.native-install ]];then die "$DATA 已有数据；本脚本不会自动导入或覆盖";fi
 if [[ -e $UNIT && ! -f $BASE/.native-install ]];then die '发现其他 feather-panel.service，不会覆盖';fi
 export DEBIAN_FRONTEND=noninteractive
-echo '安装 Python、screen、字体和游戏运行库……'
+step 1 '安装 Python、screen、字体和游戏运行库'
 dpkg --add-architecture i386
 APT_OPTIONS=(-o Acquire::Retries=2 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25)
 apt-get "${APT_OPTIONS[@]}" -o APT::Update::Error-Mode=any update
@@ -75,6 +78,7 @@ touch "$BASE/.native-install"
 TEMP=$(mktemp -d /tmp/feather-native.XXXXXXXX)
 trap 'rm -rf -- "$TEMP"' EXIT
 NODE_DIR="$BASE/runtime/node-v$NODE_VERSION-linux-x64"
+step 2 '准备独立 Node.js 运行环境'
 if [[ ! -x $NODE_DIR/bin/node ]];then
   echo "下载独立 Node.js $NODE_VERSION（不替换系统 Node.js）……"
   curl --fail --location --retry 3 --retry-all-errors --connect-timeout 15 --speed-time 30 --speed-limit 1024 --max-time 600 "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz" -o "$TEMP/node.tar.xz"
@@ -84,13 +88,15 @@ fi
 "$NODE_DIR/bin/node" --input-type=module -e 'import {DatabaseSync} from "node:sqlite"; const db=new DatabaseSync(":memory:"); db.close();'
 RELEASE="$BASE/releases/$(date -u +%Y%m%dT%H%M%SZ)-$$"
 install -d -m 0755 "$RELEASE"
-for item in backend vendor licenses assets index.html backend-client.js wallpaper.mp4 README.md THIRD_PARTY_NOTICES.md;do
+for item in backend vendor licenses assets index.html backend-client.js wallpaper.mp4 install-online.sh README.md THIRD_PARTY_NOTICES.md;do
   [[ -e "$SOURCE/$item" ]] && cp -R -- "$SOURCE/$item" "$RELEASE/"
 done
 chmod -R u=rwX,go=rX "$RELEASE"
+if [[ ${FEATHER_RELEASE_VERSION:-} =~ ^[A-Za-z0-9_.-]+$ ]];then printf '%s\n' "$FEATHER_RELEASE_VERSION" > "$RELEASE/.release-version";chmod 0644 "$RELEASE/.release-version";fi
 "$NODE_DIR/bin/node" --check "$RELEASE/backend/src/server.mjs"
 "$NODE_DIR/bin/node" --check "$RELEASE/backend/scripts/native-maintenance.mjs"
 install -d -m 0700 -o "$ACCOUNT" -g "$ACCOUNT" "$DATA/steamcmd"
+step 3 '准备 SteamCMD'
 if [[ ! -f $DATA/steamcmd/steamcmd.sh ]];then
   echo '下载 SteamCMD（游戏由面板内点击安装）……'
   curl --fail --location --retry 3 --retry-all-errors --connect-timeout 15 --speed-time 30 --speed-limit 1024 --max-time 300 https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz -o "$TEMP/steamcmd.tar.gz"
@@ -101,6 +107,7 @@ if [[ ! -f $DATA/steamcmd/steamcmd.sh ]];then
   chown -R "$ACCOUNT:$ACCOUNT" "$DATA/steamcmd"
 fi
 OLD_RELEASE=$(readlink -f "$BASE/current" || true)
+step 4 '保存原运行世界与服务配置'
 BACKUP="$BASE/backups/$(date -u +%Y%m%dT%H%M%SZ)-$$"
 install -d -m 0700 "$BACKUP"
 [[ ! -f $UNIT ]] || cp "$UNIT" "$BACKUP/service"
@@ -127,6 +134,7 @@ if ((ACTIVE));then
 fi
 if [[ -f $DATA/panel.sqlite ]];then "$NODE_DIR/bin/node" --input-type=module -e 'import {DatabaseSync,backup} from "node:sqlite";const db=new DatabaseSync(process.argv[1],{readOnly:true});await backup(db,process.argv[2]);db.close();' "$DATA/panel.sqlite" "$BACKUP/panel.sqlite";fi
 ln -sfn "$RELEASE" "$BASE/current.next"
+step 5 '切换程序并启动服务'
 mv -Tf "$BASE/current.next" "$BASE/current"
 sed "s|@NODE@|$NODE_DIR/bin/node|g" "$SOURCE/deploy/feather-panel.service" > "$UNIT"
 install -m 0755 "$SOURCE/deploy/featherpanel" /usr/local/bin/featherpanel
@@ -144,6 +152,7 @@ rollback(){
 }
 systemctl start feather-panel.service || rollback
 if ! "$NODE_DIR/bin/node" "$RELEASE/backend/scripts/native-maintenance.mjs" health;then rollback;fi
+step 6 '检查健康状态并恢复原运行世界'
 systemctl enable feather-panel.service
 if ((ACTIVE));then "$NODE_DIR/bin/node" "$RELEASE/backend/scripts/native-maintenance.mjs" restore "$BACKUP/worlds.json" || die "面板已更新，部分世界未能启动，请查看日志；原状态：$BACKUP/worlds.json";fi
 printf '\n安装完成：内网 TCP %s，服务名 feather-panel。\n' "$PORT"
@@ -151,3 +160,4 @@ echo 'NAT 云服请把自己的公网端口转发到此内网端口。'
 echo '查看初始化密钥：sudo featherpanel key'
 echo '查看服务状态：sudo featherpanel status'
 echo '查看面板日志：sudo featherpanel logs'
+echo '再次打开部署管理菜单：sudo featherpanel'

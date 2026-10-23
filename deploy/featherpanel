@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
-case "${1:-help}" in
+case "${1:-menu}" in
+  menu|update)
+    ((EUID==0)) || { echo '需要 sudo 权限' >&2;exit 1; }
+    menu=/opt/feather-panel-native/current/install-online.sh
+    [[ -f $menu ]] || { echo '缺少在线管理入口，请重新运行在线安装脚本。' >&2;exit 1; }
+    if [[ ${1:-menu} == update ]];then shift;exec bash "$menu" --install --refresh "$@";fi
+    exec bash "$menu" --menu;;
   status) exec systemctl status feather-panel.service --no-pager;;
   logs) exec journalctl -u feather-panel.service -n 100 -f;;
+  logs-recent) exec journalctl -u feather-panel.service -n 100 --no-pager;;
   key)
     ((EUID==0)) || { echo '请使用 sudo featherpanel key' >&2;exit 1; }
     if [[ -f /var/lib/feather-panel/setup-key ]];then cat /var/lib/feather-panel/setup-key;
@@ -23,5 +30,5 @@ case "${1:-help}" in
     "$node" "$base/current/backend/scripts/native-maintenance.mjs" stop "$state"
     systemctl "${1}" feather-panel.service
     if [[ $1 == restart ]];then "$node" "$base/current/backend/scripts/native-maintenance.mjs" health;"$node" "$base/current/backend/scripts/native-maintenance.mjs" restore "$state";fi;;
-  *) printf '用法：sudo featherpanel {status|logs|key|start|restart|stop}\n更新：在新版源码目录执行 sudo bash install.sh\n';;
+  *) printf '用法：sudo featherpanel [menu|status|logs|key|start|restart|stop|update]\n更新：sudo featherpanel update [--line auto|direct|gh-proxy.com|ghfast.top]\n';;
 esac
