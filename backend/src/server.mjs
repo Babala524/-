@@ -18,6 +18,7 @@ import { ModUpdates } from './mod-updates.mjs';
 import { packageLimit } from './mod-library.mjs';
 import { AdminSessions, UploadGate, safeEqual, sameOrigin, sessionCookie, securityHeaders, secureHTML } from './security.mjs';
 import { Accounts } from './accounts.mjs';
+import {ensureNative} from './native-dependencies.mjs';
 
 async function uploadedPackage(req,config,operation,uploads) {
   const size=Number(req.headers['content-length']);demand(Number.isSafeInteger(size)&&size>0&&size<=packageLimit,'模组 ZIP 为空或超过 512 MB',413);
@@ -115,6 +116,11 @@ export function createPanel(overrides={}) {
         res.writeHead(302,{Location:'/login'});res.end();return;
       }
       const principal=sessions.principal(req);
+      if(route==='/api/environment/prepare'&&method==='POST'){
+        demand(config.nativeDependencies,'此部署不需要准备原生环境',409);
+        const input=await bodyJSON(req);demand(['python','map','game'].includes(input.group),'未知依赖类型');
+        send(res,202,{data:store.task('准备运行环境','0',async report=>{await ensureNative(config,input.group,report);return {ready:true};})});return;
+      }
       if(route==='/api/session'&&method==='DELETE'){sessions.revoke(req);res.setHeader('Set-Cookie',sessionCookie('',config.secureCookies||req.socket.encrypted));send(res,200,{ok:true});return;}
       if(route==='/api/account/me'&&method==='GET'){send(res,200,{data:principal});return;}
       if(route==='/api/account/password'&&method==='PUT'){demand(principal?.kind==='account','账号会话才可修改密码',403);sessions.checkLogin(req);const input=await bodyJSON(req);send(res,200,{data:await accounts.changePassword(principal.userId,input.password,input.currentPassword)});return;}
@@ -130,7 +136,8 @@ export function createPanel(overrides={}) {
       if(route==='/api/game/status'&&method==='GET'){send(res,200,{data:await runtime.gameUpdateCheck()});return;}
       if(route==='/api/game/update/cancel'&&method==='POST'){
         demand(installing&&store.sharedBusy,'当前没有正在进行的游戏更新',409);
-        send(res,202,{data:{cancelled:runtime.cancelGameUpdate()}});return;
+        demand(runtime.cancelGameUpdate(),'正在准备运行环境，请等待完成后再终止游戏下载',409);
+        send(res,202,{data:{cancelled:true}});return;
       }
       if((route==='/api/game/install'||route==='/api/game/update')&&method==='POST'){
         const updating=route==='/api/game/update';
@@ -246,6 +253,7 @@ export function createPanel(overrides={}) {
       if(relative==='index.html'){
         const roomID=url.searchParams.get('room')||'0';let initial={room:null,overview:null};
         try{initial={room:rooms.public(store.getRoom(roomID)),overview:await runtime.overview(roomID)};}catch(error){if(error.status!==404)throw error;}
+        initial.nativeDependencies=config.nativeDependencies;
         const state=JSON.stringify(initial).replace(/</g,'\\u003c');
         const template=fs.readFileSync(file,'utf8');
         const html=template.replace('</body>',`<script>window.featherPanelInitialState=${state};</script><script src="/backend-client.js"></script>\n</body>`);

@@ -10,6 +10,7 @@ __pycache__/
 *.pyc
 node_modules/
 dist/
+runtime/
 .DS_Store
 cloud-deployment.md
 verification.json

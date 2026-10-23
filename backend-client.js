@@ -29,6 +29,14 @@
     throw Error('任务仍未完成，请稍后查看日志');
   }
   window.featherPanelRoom = { id:roomID };
+  const preparedEnvironment=new Map();
+  async function prepareEnvironment(group){
+    if(!serverSnapshot?.nativeDependencies)return;
+    if(preparedEnvironment.has(group))return preparedEnvironment.get(group);
+    if(typeof toast==='function')toast(group==='map'?'首次使用：正在检查地图运行环境，请稍候':'首次使用：正在检查存档运行环境，请稍候');
+    const pending=request('/environment/prepare',{group}).then(task).catch(error=>{preparedEnvironment.delete(group);throw error;});
+    preparedEnvironment.set(group,pending);return pending;
+  }
   window.featherModSelectionChanged=()=>{try{localStorage.setItem(selectionKey,JSON.stringify({mods:roomDraft.mods.map(({id,name,enabled,config})=>({id,name,enabled,config})),saved:false}));}catch{}};
   window.featherModSelectionLabel=mod=>{const saved=savedMods.find(item=>item.id===mod.id);return mod.enabled?(saved?.enabled?'已保存启用 · 启动后加载':'待应用 · 已选择启用'):saved?.enabled?'待应用 · 已选择停用':'已安装';};
   window.featherPanelServices = {
@@ -61,18 +69,18 @@
     getModConfig:input=>request(route('mods/config'),{modID:input.modID,retryTranslation:input.retryTranslation===true}),
     downloadMod:input=>request(route('mods/download'),{id:input.id,source:input.source,hash:input.hash}).then(result=>task(result,input.onProgress)),
     getModLibrary:()=>request('/mod-library'),
-    collectMod:input=>request(route('mods/collect'),{id:input.id}),
+    collectMod:async input=>{await prepareEnvironment('map');return request(route('mods/collect'),{id:input.id});},
     submitLibraryMod:input=>request('/mod-library/submit',{id:input.id,consent:input.consent}),
     reviewLibraryMod:input=>request('/mod-library/review',input),
     unpublishLibraryMod:input=>request('/mod-library/unpublish',input),
     removeLibraryMod:input=>request('/mod-library/remove',input),
-    uploadMod:input=>new Promise((resolve,reject)=>{
+    uploadMod:async input=>{await prepareEnvironment('map');return new Promise((resolve,reject)=>{
       const xhr=new XMLHttpRequest(),query=new URLSearchParams({filename:input.file.name,id:input.id,name:input.name||''});
       xhr.open('POST','/api'+route('mods/upload')+'?'+query);xhr.timeout=180000;xhr.setRequestHeader('Content-Type','application/zip');
       xhr.upload.onprogress=e=>{if(e.lengthComputable)input.onProgress?.(e.loaded/e.total*100);};
       xhr.onerror=()=>reject(Error('模组上传连接失败'));xhr.ontimeout=()=>reject(Error('模组上传超时'));
       xhr.onload=()=>{try{const payload=JSON.parse(xhr.responseText);if(xhr.status<200||xhr.status>=300)throw Error(payload.error||'模组上传失败');resolve(payload.data??payload);}catch(e){reject(e);}};xhr.send(input.file);
-    }).then(result=>task(result,input.onTaskProgress)),
+    }).then(result=>task(result,input.onTaskProgress));},
     updateMod:input=>request(route('mods/update'),{id:input.id}).then(result=>task(result,input.onProgress)),
     deleteMod:input=>request(route('mods/delete'),{id:input.id}).then(task),
     getLogs:input=>{const query=new URLSearchParams();if(Number.isFinite(input?.limit))query.set('limit',String(Math.round(input.limit)));if(input?.world&&input.world!=='all')query.set('world',input.world);if(input?.type&&input.type!=='all')query.set('type',input.type);return request(route('logs')+(query.toString()?'?'+query:''));},
@@ -80,7 +88,7 @@
     getPlayers:()=>request(route('players')),
     updatePlayerList:input=>request(route('players/list'),{kind:input.kind,userid:input.userid,enabled:input.enabled}),
     kickPlayer:input=>request(route('players/kick'),{userid:input.userid}).then(task),
-    getMapPreview:input=>request(route('map')+'?world='+encodeURIComponent(input.worldID||'')+'&quality='+(input.quality==='preview'?'preview':'full')+(input.force?'&refresh=1':''),undefined,'GET',{signal:input.signal||AbortSignal.timeout(120000)}),
+    getMapPreview:async input=>{await prepareEnvironment('map');return request(route('map')+'?world='+encodeURIComponent(input.worldID||'')+'&quality='+(input.quality==='preview'?'preview':'full')+(input.force?'&refresh=1':''),undefined,'GET',{signal:input.signal||AbortSignal.timeout(120000)});},
     getMapDashboard:async input=>{
       const worlds=overview?.worlds||serverSnapshot?.room?.worlds||[];
       const worldID=input?.worldID||worlds.find(world=>world.running)?.directory||worlds[0]?.directory||'';
@@ -92,7 +100,7 @@
     downloadSave:input=>{const link=document.createElement('a');link.href='/api'+route('saves/download')+'?saveID='+encodeURIComponent(input.saveID);link.download='';document.body.append(link);link.click();link.remove();return {downloaded:true};},
     getSnapshots:()=>request(route('snapshots')),
     restoreSnapshot:input=>request(route('snapshots/restore'),{snapshotID:input.snapshotID,worldID:input.worldID}).then(task).then(async result=>{const room=await request(route(''));savedMods=structuredClone(room.mods||[]);if(typeof loadBackendRoom==='function')loadBackendRoom(room);try{if(typeof exportRoomDraft==='function')localStorage.setItem('feather-room-settings-v3',JSON.stringify(exportRoomDraft()));}catch{}if(typeof refreshInstalledMods==='function')await refreshInstalledMods(true);return {...result,room};}),
-    uploadSave:input=>new Promise((resolve,reject)=>{
+    uploadSave:async input=>{await prepareEnvironment('python');return new Promise((resolve,reject)=>{
       const xhr=new XMLHttpRequest(),query=new URLSearchParams({filename:input.file.name,name:input.name});
       xhr.open('POST','/api'+route('saves/upload')+'?'+query);xhr.timeout=180000;
       xhr.setRequestHeader('Content-Type','application/octet-stream');
@@ -100,7 +108,7 @@
       xhr.onerror=()=>reject(Error('上传连接失败'));xhr.ontimeout=()=>reject(Error('上传超时'));
       xhr.onload=()=>{try{const payload=JSON.parse(xhr.responseText);if(xhr.status<200||xhr.status>=300)throw Error(payload.error||'上传失败');resolve(payload.data??payload);}catch(error){reject(error);}};
       xhr.send(input.file);
-    })
+    });}
   };
   if(typeof refreshInbox==='function'){
     refreshInbox();

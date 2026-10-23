@@ -10,6 +10,7 @@ case "${1:-menu}" in
   status) exec systemctl status feather-panel.service --no-pager;;
   logs) exec journalctl -u feather-panel.service -n 100 -f;;
   logs-recent) exec journalctl -u feather-panel.service -n 100 --no-pager;;
+  dependencies) exec journalctl -u 'feather-panel-dependencies@*' -n 100 --no-pager;;
   key)
     ((EUID==0)) || { echo '请使用 sudo featherpanel key' >&2;exit 1; }
     if [[ -f /var/lib/feather-panel/setup-key ]];then cat /var/lib/feather-panel/setup-key;

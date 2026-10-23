@@ -1,5 +1,9 @@
 # Third-party notices
 
+## Native Node.js runtime
+
+Native release archives include the official Node.js 24.22.1 Linux x64 distribution, verified against a pinned SHA-256 before packaging and installation. Its LICENSE file and bundled third-party notices are retained inside the runtime archive. Source: https://nodejs.org/dist/v24.22.1/ . The runtime is extracted into the panel's own directory; system Node.js is not replaced.
+
 ## DMP web
 
 Repository: https://github.com/miracleEverywhere/dst-management-platform-web

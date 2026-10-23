@@ -11,6 +11,12 @@ import {Accounts} from '../src/accounts.mjs';
 
 const secret='security-test-admin-secret-at-least-32';
 const req=(headers={},method='GET')=>({headers,method,socket:{remoteAddress:'127.0.0.1',encrypted:false}});
+test('dependency preparation requires authentication and rejects arbitrary commands',async()=>fixture(async(app,base)=>{
+ let response=await fetch(base+'/api/environment/prepare',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"group":"map"}'});
+ assert.equal(response.status,401);
+ response=await fetch(base+'/api/environment/prepare',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+secret},body:'{"group":"game;whoami"}'});
+ assert.equal(response.status,400);assert.match((await response.json()).error,/未知依赖/);
+},{nativeDependencies:true}));
 async function fixture(run,options={}){
   const data=fs.mkdtempSync(path.join(os.tmpdir(),'feather-security-'));
   const app=createPanel({data,game:path.join(data,'dst'),adminToken:secret,translationProvider:'off',...options});

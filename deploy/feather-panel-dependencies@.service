@@ -1,0 +1,20 @@
+[Unit]
+Description=FeatherPanel dependency preparation
+
+[Service]
+Type=exec
+User=root
+ExecStart=@NODE@ @RELEASE@/deploy/feather-dependencies.mjs
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+TimeoutStartSec=20min
+RuntimeMaxSec=20min
+KillMode=control-group
+UMask=0022
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+NoNewPrivileges=true

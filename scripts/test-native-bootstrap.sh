@@ -11,12 +11,16 @@ mkdir -p "$TEMP/bin"
 python3 - "$TEMP" <<'PY'
 import tarfile,io,hashlib,json,sys,pathlib
 root=pathlib.Path(sys.argv[1])
-for kind in ['good','unsafe','corrupt']:
+for kind in ['good','unsafe','corrupt','link','duplicate']:
  with tarfile.open(root/(kind+'.tar.gz'),'w:gz') as tar:
   text=b'#!/bin/bash\nprintf "%s\\n" "$@" > "$FIXTURE/received"\n'
   item=tarfile.TarInfo('FeatherPanel/install.sh');item.size=len(text);tar.addfile(item,io.BytesIO(text))
   if kind=='unsafe':
    item=tarfile.TarInfo('FeatherPanel/../../escaped');item.size=1;tar.addfile(item,io.BytesIO(b'x'))
+  if kind=='link':
+   item=tarfile.TarInfo('FeatherPanel/link');item.type=tarfile.SYMTYPE;item.linkname='/etc';tar.addfile(item)
+  if kind=='duplicate':
+   item=tarfile.TarInfo('FeatherPanel/install.sh');item.size=1;tar.addfile(item,io.BytesIO(b'x'))
  digest=hashlib.sha256((root/(kind+'.tar.gz')).read_bytes()).hexdigest()
  if kind=='corrupt':digest='0'*64
  (root/(kind+'.json')).write_text(json.dumps({'version':'v-test','sha256':digest}))
@@ -42,6 +46,8 @@ case "$url" in
 esac
 SH
 chmod 755 "$TEMP/bin/curl"
+printf '#!/bin/sh\necho Unexpected bootstrap Python >&2\nexit 97\n' > "$TEMP/bin/python3"
+chmod 755 "$TEMP/bin/python3"
 export PATH="$TEMP/bin:$PATH"
 bash -n "$SOURCE/install-online.sh" "$SOURCE/install.sh" "$SOURCE/deploy/featherpanel"
 bash "$SOURCE/install-online.sh" --repo test/panel --line direct --port 18081 --check
@@ -53,14 +59,14 @@ grep -q 'https://ghfast.top/https://github.com/test/panel' "$TEMP/urls"
 rm "$TEMP/received"
 if FAIL_DIRECT=1 bash "$SOURCE/install-online.sh" --install --repo test/panel --line direct;then exit 1;fi
 test ! -e "$TEMP/received"
-for bad in corrupt unsafe;do
+for bad in corrupt unsafe link duplicate;do
  if CASE=$bad bash "$SOURCE/install-online.sh" --install --repo test/panel --line direct;then exit 1;fi
  test ! -e "$TEMP/received"
 done
 if bash "$SOURCE/install-online.sh" --repo ../panel;then exit 1;fi
 if bash "$SOURCE/install-online.sh" --line attacker.example;then exit 1;fi
 # Published standalone entry pins its verified package and avoids a metadata request.
-python3 - "$SOURCE/install-online.sh" "$TEMP" <<'PY'
+/usr/bin/python3 - "$SOURCE/install-online.sh" "$TEMP" <<'PY'
 import json,pathlib,sys
 root=pathlib.Path(sys.argv[2]);script=pathlib.Path(sys.argv[1]).read_text()
 digest=json.loads((root/'good.json').read_text())['sha256']

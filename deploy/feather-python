@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+base=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+node=$(find /opt/feather-panel-native/runtime -maxdepth 3 -path '*/bin/node' -type f | sort -V | tail -1)
+[[ -x $node ]] || { echo '找不到面板运行环境' >&2;exit 1; }
+exec "$node" "$base/backend/scripts/native-python.mjs" "$@"

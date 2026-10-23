@@ -1,0 +1,14 @@
+[Unit]
+Description=FeatherPanel fixed dependency requests
+
+[Socket]
+ListenStream=/run/feather-panel-dependencies.sock
+SocketUser=root
+SocketGroup=featherpanel
+SocketMode=0660
+Accept=yes
+RemoveOnStop=yes
+MaxConnections=8
+
+[Install]
+WantedBy=sockets.target

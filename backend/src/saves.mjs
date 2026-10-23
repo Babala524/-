@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { demand, Fault, inside, atomic, exec, walk, sha, humanSize, timeString, jsonRead, identifier } from './core.mjs';
 import { lua, staticLuaTable, levelData, savedLevelSource, presets } from './lua.mjs';
 import { SaveTransaction } from './save-transaction.mjs';
+import {ensureNative} from './native-dependencies.mjs';
 
 export class Saves {
   constructor(store, runtime, mods=null) {
@@ -107,6 +108,7 @@ export class Saves {
     return { deleted: rows.length };
   }
   async backup(id,{resume=true,name=null}={}) {
+    await ensureNative(this.config,'python');
     const room=this.store.getRoom(id), originally=(await this.runtime.status(id)).filter(world=>world.running);
     if(originally.length) await this.runtime.stop(id);
     const temp=inside(this.config.data,'tmp/backup-'+crypto.randomUUID()+'.zip'); fs.mkdirSync(path.dirname(temp),{recursive:true});
@@ -122,6 +124,7 @@ export class Saves {
     }
   }
   async upload(id,file,name) {
+    await ensureNative(this.config,'python');
     this.store.getRoom(id); demand(fs.existsSync(file),'上传文件不存在');
     const staging=inside(this.config.data,'tmp/extract-'+crypto.randomUUID());
     try {
@@ -133,6 +136,7 @@ export class Saves {
     } finally { fs.rmSync(staging,{recursive:true,force:true}); fs.rmSync(file,{force:true}); }
   }
   async restore(id, saveID, report=()=>{}) {
+    await ensureNative(this.config,'python',report);
     const { entry, file } = this.download(id, saveID), room = this.store.getRoom(id);
     const wasRunning = (await this.runtime.status(id)).filter(world => world.running).map(world => world.directory);
     const staging = inside(this.config.data, `tmp/restore-save-${crypto.randomUUID()}`);

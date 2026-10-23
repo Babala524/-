@@ -9,6 +9,7 @@ import { WorldMetrics } from './world-metrics.mjs';
 import { GameUpdateProgress, gameUpdateOutcome, runSteamUpdate } from './game-update.mjs';
 import { GameVersionCheck, installedGameBuild } from './game-version.mjs';
 import { readWhitelist, reservedClusterSource } from './reserved-slots.mjs';
+import {ensureNative, ensureSteam} from './native-dependencies.mjs';
 
 export class Runtime {
   constructor(store) { this.store = store; this.config = store.config; this.telemetry = new Telemetry(this); this.consoleQueues=new Map();this.mapRenderer=new MapRenderer(this.config);this.worldMetrics=new WorldMetrics();this.gameVersions=new GameVersionCheck();this.gameUpdateController=null; }
@@ -17,7 +18,7 @@ export class Runtime {
   async sessions() {
     if (process.platform !== 'linux') return new Set();
     try { const { stdout } = await exec('screen', ['-ls']); return new Set([...stdout.matchAll(/\d+\.(Feather_[A-Za-z0-9_-]+)\s/g)].map(match => match[1])); }
-    catch (error) { if (error.code === 1 && /No Sockets|No screens/i.test(error.stdout || '')) return new Set(); throw error; }
+    catch (error) { if (error.code==='ENOENT'||(error.code === 1 && /No Sockets|No screens/i.test(error.stdout || ''))) return new Set(); throw error; }
   }
   async status(id) {
     let room; try { room = this.store.getRoom(id); } catch (error) { if (error.status === 404) return []; throw error; }
@@ -83,6 +84,7 @@ export class Runtime {
     const binary = this.binary(room);
     for(const mod of room.mods.filter(mod=>mod.enabled))demand(fs.existsSync(inside(this.config.game,'mods/workshop-'+mod.id+'/modinfo.lua')),'模组 '+mod.name+' 尚未安装，请先下载',409);
     demand(fs.existsSync(binary), '请先安装游戏服务端', 409);
+    await ensureNative(this.config,'game');
     const token = inside(this.store.cluster(id), 'cluster_token.txt');
     demand(fs.existsSync(token) && fs.readFileSync(token,'utf8').trim(), '缺少游戏令牌', 409);
     const cluster=inside(this.store.cluster(id),'cluster.ini'),slots=readWhitelist(this.store,id).length;
@@ -214,6 +216,7 @@ export class Runtime {
   }
   async install(report = () => {}, options = {}) {
     demand(process.platform === 'linux', '安装游戏需要 Linux 环境', 503);
+    await ensureSteam(this.config,report);
     const script = inside(this.config.steam,'steamcmd.sh');
     demand(fs.existsSync(script), '未找到 SteamCMD，请检查安装目录或重新运行部署安装脚本', 409);
     const logFile = inside(this.config.data,'installation.log');

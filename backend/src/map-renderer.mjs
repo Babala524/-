@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import {exec, root, sha, Fault, demand} from './core.mjs';
 import {ModMapAssets} from './mod-map-assets.mjs';
+import {ensureNative} from './native-dependencies.mjs';
 
 // Rendering runs outside Node's event loop. Deduplicate identical requests and
 // serialize different worlds so map previews cannot exhaust a small game host.
@@ -39,6 +40,7 @@ export class MapRenderer {
     this.pending.set(key,job);this.queue=job;return job;
   }
   async run(assets,input,quality='full') {
+    await ensureNative(this.config,'map');
     const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'feather-map-'));
     try {
       const source=path.join(temporary,'map.json'),destination=path.join(temporary,quality==='preview'?'map.webp':'map.png');
@@ -47,7 +49,7 @@ export class MapRenderer {
       try {({stdout}=await exec(this.config.python||'python3',[path.join(root,'backend/scripts/render_map.py'),assets,source,destination],{timeout:60000,killSignal:'SIGKILL',maxBuffer:1048576,windowsHide:true}));}
       catch(error) {
         if(error.killed)throw new Fault(504,'原版地图渲染超时，请稍后刷新重试');
-        if(/PIL|No module named/.test(error.stderr||''))throw new Fault(503,'地图渲染依赖缺失，请更新面板 Docker 镜像');
+        if(/PIL|No module named/.test(error.stderr||''))throw new Fault(503,this.config.nativeDependencies?'地图运行环境未准备完成，请查看依赖服务日志':'地图渲染依赖缺失，请更新面板 Docker 镜像');
         throw new Fault(422,'原版地图渲染失败：'+String(error.stderr||error.message).trim().slice(0,220));
       }
       const meta=JSON.parse(stdout),png=await fs.readFile(destination);

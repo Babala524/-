@@ -3,6 +3,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { demand, Fault, inside, walk, exec, jsonRead } from './core.mjs';
 import { contentProgress } from './workshop-state.mjs';
+import {ensureNative} from './native-dependencies.mjs';
 
 export async function downloadLegacy(config,id,slot,report,fetcher=fetch) {
   const info=jsonRead(inside(config.data,'workshop-meta/'+id+'.json'),{});
@@ -20,6 +21,7 @@ export async function downloadLegacy(config,id,slot,report,fetcher=fetch) {
   }}finally{fs.closeSync(fd);}
   demand(!Number(response.headers.get('content-length'))||received===Number(response.headers.get('content-length')),'下载文件不完整',502);
   report(100,'文件已下载，正在解包验证',{stage:'extracting',downloadedBytes:received,totalBytes:received,progressSource:'http-bytes'});
+  await ensureNative(config,'python',report);
   await exec(config.python,[path.join(config.root,'backend/scripts/archive.py'),'mod-extract',archive,extracted,String(config.extractLimit)],{timeout:120000,maxBuffer:1048576});
   demand(fs.existsSync(inside(extracted,'modinfo.lua')),'工坊文件缺少 modinfo.lua',502);walk(extracted);return extracted;
 }
@@ -142,6 +144,7 @@ export async function downloadWorkshop(config, id, slot, report) {
     if(archives.length===1){
       report(null,'正在解包旧版 Steam 工坊模组',{stage:'extracting'});
       const extracted=inside(game,'legacy-extracted');fs.rmSync(extracted,{recursive:true,force:true});
+      await ensureNative(config,'python',report);
       try{await exec(config.python,[path.join(config.root,'backend/scripts/archive.py'),'mod-extract',inside(source,archives[0]),extracted,String(config.extractLimit)],{timeout:120000,maxBuffer:1048576});}
       catch{throw new Fault(502,'旧版模组包无法安全解压，请检查模组文件后重试');}
       source=extracted;

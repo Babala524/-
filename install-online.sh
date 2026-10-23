@@ -2,6 +2,7 @@
 # Online installer and native service menu. Publish the generated dist/ entry.
 set -Eeuo pipefail
 umask 077
+export LC_ALL=C.UTF-8
 REPOSITORY=Babala524/-
 RELEASE_VERSION=latest
 BUNDLED_VERSION=
@@ -98,10 +99,10 @@ fi
 STAGE='环境与工具检查'
 trap 'printf "\n失败步骤：%s。未完成安装，请按上述错误处理后重试。\n" "$STAGE" >&2' ERR
 printf '\n[1/5] %s\n' "$STAGE"
-if ! command -v curl >/dev/null || ! command -v python3 >/dev/null || [[ ! -s /etc/ssl/certs/ca-certificates.crt ]];then
+if ! command -v curl >/dev/null || ! command -v tar >/dev/null || [[ ! -s /etc/ssl/certs/ca-certificates.crt ]];then
  export DEBIAN_FRONTEND=noninteractive
  apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o APT::Update::Error-Mode=any update
- apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 install -y --no-install-recommends ca-certificates curl python3
+ apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 install -y --no-install-recommends ca-certificates curl tar
 fi
 TEMP=$(mktemp -d /tmp/feather-online.XXXXXXXX)
 trap 'rm -rf -- "$TEMP"' EXIT
@@ -113,16 +114,11 @@ else
  if [[ $RELEASE_VERSION == latest ]];then META_URL="https://github.com/$REPOSITORY/releases/latest/download/release-info.json";
  else META_URL="https://github.com/$REPOSITORY/releases/download/$RELEASE_VERSION/release-info.json";fi
  fetch_file "$META_URL" "$TEMP/release.json" 60
- python3 - "$TEMP/release.json" "$RELEASE_VERSION" > "$TEMP/version" <<'PY'
-import json,re,sys
-info=json.load(open(sys.argv[1],encoding='utf-8'));tag=info.get('version','');digest=info.get('sha256','')
-if not isinstance(tag,str) or not re.fullmatch(r'[A-Za-z0-9_.-]+',tag) or tag in {'.','..'}:raise SystemExit('发布版本信息无效')
-if not isinstance(digest,str) or not re.fullmatch(r'[a-f0-9]{64}',digest):raise SystemExit('发布包摘要无效')
-if sys.argv[2]!='latest' and sys.argv[2]!=tag:raise SystemExit('发布标签与版本信息不匹配')
-print(tag);print(digest)
-PY
- read -r RELEASE_VERSION < "$TEMP/version"
- EXPECTED_SHA256=$(sed -n '2p' "$TEMP/version")
+ # Metadata only selects a validated tag and a hexadecimal digest. Never source it.
+ META_VERSION=$(sed -nE 's/.*"version"[[:space:]]*:[[:space:]]*"([A-Za-z0-9_.-]+)".*/\1/p' "$TEMP/release.json")
+ EXPECTED_SHA256=$(sed -nE 's/.*"sha256"[[:space:]]*:[[:space:]]*"([a-f0-9]{64})".*/\1/p' "$TEMP/release.json")
+ [[ $RELEASE_VERSION == latest || $RELEASE_VERSION == "$META_VERSION" ]] || die '发布标签与版本信息不匹配'
+ RELEASE_VERSION=$META_VERSION
 fi
 [[ $RELEASE_VERSION =~ ^[A-Za-z0-9_.-]+$ && $RELEASE_VERSION != . && $RELEASE_VERSION != .. && $EXPECTED_SHA256 =~ ^[a-f0-9]{64}$ ]] || die '发布包版本或摘要无效'
 RELEASE="https://github.com/$REPOSITORY/releases/download/$RELEASE_VERSION"
@@ -130,24 +126,20 @@ printf '选定版本：%s\n' "$RELEASE_VERSION"
 STAGE='下载完整部署包';printf '\n[3/5] %s\n' "$STAGE"
 fetch_file "$RELEASE/FeatherPanel-native.tar.gz" "$TEMP/release.tar.gz"
 STAGE='校验并解压部署包';printf '\n[4/5] %s\n' "$STAGE"
-python3 - "$TEMP" "$EXPECTED_SHA256" <<'PY'
-import hashlib,pathlib,re,sys,tarfile
-root=pathlib.Path(sys.argv[1]);archive=root/'release.tar.gz'
-digest=hashlib.sha256()
-with archive.open('rb') as stream:
- for chunk in iter(lambda:stream.read(1024*1024),b''):digest.update(chunk)
-if digest.hexdigest()!=sys.argv[2]:raise SystemExit('发布包 SHA-256 校验失败，未执行安装')
-with tarfile.open(archive,'r:gz') as tar:
- members=tar.getmembers();seen=set();total=0
- if len(members)>50000:raise SystemExit('发布包文件数超出限制')
- for item in members:
-  name=pathlib.PurePosixPath(item.name)
-  if name.is_absolute() or '..' in name.parts or not name.parts or name.parts[0]!='FeatherPanel' or '\\' in item.name or item.name in seen or not (item.isfile() or item.isdir()):raise SystemExit('发布包包含不允许的路径或文件')
-  seen.add(item.name);total+=item.size
-  if total>2*1024**3:raise SystemExit('发布包解压大小超出限制')
- if 'FeatherPanel/install.sh' not in seen:raise SystemExit('发布包缺少安装入口')
- tar.extractall(root/'source',members=members)
-print('发布包校验通过')
-PY
+printf '%s  %s\n' "$EXPECTED_SHA256" "$TEMP/release.tar.gz" | sha256sum --check --status || die '发布包 SHA-256 校验失败，未执行安装'
+# Validate the complete member list before extracting any file. Published assets
+# contain only regular files/directories with portable ASCII paths, never links.
+tar -tzf "$TEMP/release.tar.gz" > "$TEMP/members"
+tar -tvzf "$TEMP/release.tar.gz" > "$TEMP/types"
+[[ $(wc -l < "$TEMP/members") -le 50000 ]] || die '发布包文件数超出限制'
+[[ -z $(sort "$TEMP/members" | uniq -d) ]] || die '发布包包含重复路径'
+while IFS= read -r member;do
+ [[ $member =~ ^FeatherPanel/[A-Za-z0-9_./@+-]+$ && $member != *'/../'* && $member != */.. && $member != *'/./'* ]] || die '发布包包含不允许的路径或文件'
+done < "$TEMP/members"
+awk 'substr($0,1,1)!="-" && substr($0,1,1)!="d" {bad=1} {total+=$3} END {exit(bad || total>2147483648)}' "$TEMP/types" || die '发布包包含不允许的路径或文件'
+grep -qx 'FeatherPanel/install.sh' "$TEMP/members" || die '发布包缺少安装入口'
+mkdir "$TEMP/source"
+tar -xzf "$TEMP/release.tar.gz" -C "$TEMP/source" --no-same-owner --no-same-permissions
+echo '发布包校验通过'
 STAGE='安装并启动服务';printf '\n[5/5] %s · %s\n' "$STAGE" "$RELEASE_VERSION"
 FEATHER_RELEASE_VERSION="$RELEASE_VERSION" bash "$TEMP/source/FeatherPanel/install.sh" "${INSTALL_ARGS[@]}"

@@ -5,6 +5,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { demand, inside, modID, atomic, jsonRead, exec, walk, Fault } from './core.mjs';
 import { parseLua } from './lua.mjs';
+import {ensureNative} from './native-dependencies.mjs';
 
 const HASH=/^[a-f0-9]{64}$/;
 export const packageLimit=512*1048576;
@@ -45,7 +46,7 @@ export class ModLibrary {
   entry(id){return jsonRead(this.file('local/'+modID(id)+'.json'));}
   icon(hash){demand(HASH.test(String(hash)),'模组校验值不合法');return this.file('icons/'+hash+'.png');}
   checkSpace(hash,size){if(fs.existsSync(this.package(hash)))return;const dir=this.file('packages'),used=fs.existsSync(dir)?fs.readdirSync(dir).filter(name=>/^[a-f0-9]{64}\.zip$/.test(name)).reduce((total,name)=>total+fs.statSync(inside(dir,name)).size,0):0;demand(used+size<=(this.config.modLibraryLimit||4096*1048576),'模组库已达到容量限制，请清理不需要的记录或扩容',507);}
-  async renderIcon(folder,hash){try{await exec(this.config.python,[path.join(this.config.root,'backend/scripts/mod_icon.py'),folder,this.icon(hash)],{timeout:15000,maxBuffer:65536});}catch{/* Icons are optional. */}}
+  async renderIcon(folder,hash){try{await ensureNative(this.config,'map');await exec(this.config.python,[path.join(this.config.root,'backend/scripts/mod_icon.py'),folder,this.icon(hash)],{timeout:15000,maxBuffer:65536});}catch{/* Icons are optional. */}}
   storePackage(source,hash,size){this.checkSpace(hash,size);const target=this.package(hash);if(fs.existsSync(target)&&digest(target)===hash)return;fs.mkdirSync(path.dirname(target),{recursive:true});const temporary=target+'.'+crypto.randomUUID()+'.tmp';try{fs.copyFileSync(source,temporary,fs.constants.COPYFILE_EXCL);fs.chmodSync(temporary,0o600);fs.renameSync(temporary,target);}finally{fs.rmSync(temporary,{force:true});}}
   rows(kind='local') {
     demand(['local','published','pending'].includes(kind),'未知模组目录');
@@ -53,6 +54,7 @@ export class ModLibrary {
     return fs.readdirSync(dir).filter(name=>/^(?:\d{6,20}|[a-f0-9]{64})\.json$/.test(name)).map(name=>jsonRead(inside(dir,name))).filter(Boolean);
   }
   async unpack(archive,destination) {
+    await ensureNative(this.config,'python');
     try{await exec(this.config.python,[path.join(this.config.root,'backend/scripts/archive.py'),'mod-extract',archive,destination,String(unpackLimit)],{timeout:120000,maxBuffer:1048576});}
     catch(error){throw new Fault(422,'模组包校验失败：'+brief(error.stderr||error.message,300));}
     walk(destination);demand(fs.existsSync(inside(destination,'modmain.lua')),'模组包缺少 modmain.lua，无法作为服务端模组安装',422);
@@ -79,6 +81,7 @@ export class ModLibrary {
     });
   }
   async capture(id,folder) {
+    await ensureNative(this.config,'python');
     id=modID(id);const archive=this.file('tmp/'+crypto.randomUUID()+'.zip');fs.mkdirSync(path.dirname(archive),{recursive:true});
     try{walk(folder);await exec(this.config.python,[path.join(this.config.root,'backend/scripts/archive.py'),'mod-pack',folder,archive,String(unpackLimit)],{timeout:120000,maxBuffer:1048576});return await this.remember(archive,id);}
     finally{fs.rmSync(archive,{force:true});}

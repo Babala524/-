@@ -56,6 +56,7 @@ export function configuration(overrides = {}) {
   return {
     root, data, host: process.env.FEATHER_HOST || '0.0.0.0', port: Number(process.env.FEATHER_PORT || 80),
     python: process.env.FEATHER_PYTHON || (process.platform === 'win32' ? 'python' : 'python3'),
+    nativeDependencies:process.env.FEATHER_NATIVE_DEPENDENCIES==='1',
     game: path.resolve(process.env.FEATHER_GAME || path.join(data, 'dst')),
     steam: path.resolve(process.env.FEATHER_STEAM || path.join(data, 'steamcmd')),
     publicHost: process.env.FEATHER_PUBLIC_HOST || '',

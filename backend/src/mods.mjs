@@ -6,6 +6,7 @@ import { downloadWorkshop } from './workshop-download.mjs';
 import { installedRevision } from './workshop-state.mjs';
 import { ModAutoTranslate } from './mod-auto-translate.mjs';
 import { ModLibrary } from './mod-library.mjs';
+import {ensureSteam} from './native-dependencies.mjs';
 
 export class Mods {
   constructor(store,runtime) { this.store=store;this.runtime=runtime;this.config=store.config;this.jobs=new Map();this.history=[];this.slots=new Set();this.waiters=[];this.searchInflight=new Map();this.downloadRunner=downloadWorkshop;this.fetch=fetch;this.translation=new ModAutoTranslate(store); }
@@ -168,6 +169,7 @@ export class Mods {
     if(!missing.length)return {installed:[],missing:[]};
     if(this.downloadRunner===downloadWorkshop&&missing.some(id=>!this.library.entry(id))){
       demand(process.platform==='linux','恢复存档需要 Linux + SteamCMD 才能下载存档模组',503);
+      await ensureSteam(this.config,report);
       demand(fs.existsSync(inside(this.config.steam,'steamcmd.sh')),'未安装 SteamCMD，无法下载存档模组',409);
     }
     const installed=[];
@@ -189,6 +191,7 @@ export class Mods {
     demand(!(options.workshop&&jsonRead(this.receipt(id),{})?.source==='local-library'),'这个模组来自上传或共享库，请重新上传或从共享库选择版本更新',409);
     if(this.downloadRunner===downloadWorkshop&&!archived){
       demand(process.platform==='linux','下载模组需要 Linux + SteamCMD 部署环境',503);
+      await ensureSteam(this.config,report);
       demand(fs.existsSync(inside(this.config.steam,'steamcmd.sh')),'未安装 SteamCMD',409);
       try{await this.details([id]);}catch{}
     }

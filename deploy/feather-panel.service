@@ -1,6 +1,7 @@
 [Unit]
 Description=FeatherPanel native game panel
 Wants=network-online.target
+Requires=feather-panel-dependencies.socket
 After=network-online.target
 StartLimitIntervalSec=60
 StartLimitBurst=5
@@ -10,7 +11,7 @@ Type=simple
 User=featherpanel
 Group=featherpanel
 WorkingDirectory=/opt/feather-panel-native/current
-Environment=NODE_ENV=production HOME=/var/lib/feather-panel SCREENDIR=/var/lib/feather-panel/screen LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8
+Environment=NODE_ENV=production HOME=/var/lib/feather-panel SCREENDIR=/var/lib/feather-panel/screen LANG=C.UTF-8 LC_ALL=C.UTF-8 FEATHER_NATIVE_DEPENDENCIES=1
 EnvironmentFile=/etc/feather-panel.env
 ExecStart=@NODE@ /opt/feather-panel-native/current/backend/src/server.mjs
 Restart=on-failure

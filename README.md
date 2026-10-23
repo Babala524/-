@@ -20,6 +20,8 @@ curl -fL --proto '=https' --proto-redir '=https' https://gh-proxy.com/https://gi
 
 支持 x86_64 Ubuntu 22.04/24.04、Debian 12/13，要求 systemd。默认直接监听内网 TCP 80，不需要 Docker 或 Nginx；NAT 云服把公网端口转发到内网 80。每层世界的直连 UDP 端口在房间设置填写。80 已被占用时在菜单输入其他端口。无人值守安装追加 `--install`，指定端口再追加 `--port 18081`。
 
+部署包自带经摘要校验的 Node.js，首次部署先启动面板。Python、Pillow、screen、字体和游戏运行库在首次使用存档、地图或游戏功能时自动安装；已有依赖直接复用。缺少证书、tar、xz 或端口检查等基础工具时，仍需从系统软件源补齐。
+
 安装完成后打开面板，在首次初始化页面创建管理员账号。查看初始化密钥：
 
 ```bash
@@ -28,7 +30,7 @@ sudo featherpanel key
 
 创建成功后初始化密钥删除，账号密码以哈希保存。默认关闭公开注册。游戏服务端需在面板的“更新游戏”中下载。
 
-离线取得发布包后也可以解压执行 `sudo bash install.sh`。安装脚本依赖联网访问软件源、Node.js 和 Valve；已有 Docker 实例与数据不会自动迁移。详情：[原生部署与更新](docs/native-deployment.md)、[安全与账号](docs/security.md)。
+离线取得发布包后也可以解压执行 `sudo bash install.sh`。首次使用相关功能需要访问软件源及 Valve；已有 Docker 实例与数据不会自动迁移。详情：[原生部署与更新](docs/native-deployment.md)、[安全与账号](docs/security.md)。
 
 ## 功能
 
@@ -49,9 +51,9 @@ cd backend
 node --test test/*.test.mjs
 ```
 
-在项目根目录运行 `python3 scripts/package-release.py --version v2026.10.23.1`，生成 `dist/install-online.sh`、`dist/FeatherPanel-native.tar.gz`、`dist/FeatherPanel-native.tar.gz.sha256`、`dist/release-info.json`。将四个文件发布到同标签的 GitHub Release。生成的入口内置版本与包摘要，首次安装无需查询 GitHub API；更新时读取 Release 中的版本信息，沿所选下载线路请求。
+在项目根目录运行 `python3 scripts/package-release.py --version v2026.10.23.2`，构建时从 Node.js 官方获取固定版本并验证 SHA-256，再打入完整部署包。生成 `dist/install-online.sh`、`dist/FeatherPanel-native.tar.gz`、`dist/FeatherPanel-native.tar.gz.sha256`、`dist/release-info.json`。将四个文件发布到同标签的 GitHub Release。生成的入口内置版本与包摘要，首次安装无需查询 GitHub API；更新时读取 Release 中的版本信息，沿所选下载线路请求。
 
-当前 Linux 156 项后端测试通过。Ubuntu 24.04 与 Debian 12 隔离安装、重复安装及启停验证通过；真实 systemd 开机启动与完整原生开服尚未实测，Ubuntu 22.04 / Debian 13 尚未实机验证。第三方游戏、模组和网络故障无法保证不会发生，应定期备份。
+Linux 后端与按需依赖测试已通过。Ubuntu 24.04 与 Debian 12 隔离安装、重复安装及启停验证通过；真实 systemd 开机启动与完整原生开服尚未实测，Ubuntu 22.04 / Debian 13 尚未实机验证。第三方游戏、模组和网络故障无法保证不会发生，应定期备份。
 
 ## 第三方许可与素材
 
